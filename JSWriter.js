@@ -24,11 +24,17 @@
                             '<li data-mode="preview"><a>Preview</a></li>' +
                         '</ul>'),
             $editor = $('<div class="editor both">' +
-                            '<textarea name="text_markdown" class="text-write editor-text"></textarea>' +
+                            '<div class="text-write editor-window">' +
+                                '<ul data-action="controls" class="controls">' +
+                                    '<li data-action="bold" class="bold">B</li>' +
+                                    '<li data-action="italic" class="italic">I</li>' +
+                                '</ul>' +
+                                '<textarea name="text_markdown" class="text-write editor-text"></textarea>' +
+                            '</div>' +
                             '<div class="separator"></div>' +
-                            '<div class="text-preview editor-text"></div>' +
+                            '<div class="text-preview editor-text editor-window"></div>' +
                         '</div>'),
-            $textWrite = $editor.find('.text-write'),
+            $textWrite = $editor.find('.text-write textarea'),
             $textPreview = $editor.find('.text-preview');
 
         if (options.usingBootstrap) {
@@ -72,8 +78,16 @@
                 }
             });
 
-        $textWrite.on('keyup', function(e) {
-            $textPreview.html(options.textfilter($textWrite.val()));
+        $textWrite.on('keyup', updatePreview);
+
+        $editor.find('.controls').on('click', 'li', function() {
+            var action = $(this).data('action');
+            if (action == 'bold') {
+                wrapSelectedText('<strong>', '</strong>');
+            } else if (action == 'italic') {
+                wrapSelectedText('<em>', '</em>');
+            }
+            updatePreview();
         });
 
         // Init text
@@ -92,6 +106,20 @@
         }
 
         // Private methods
+        function wrapSelectedText(before, after) {
+            var start = $textWrite.get(0).selectionStart,
+                end = $textWrite.get(0).selectionEnd,
+                text = $textWrite.val();
+
+            $textWrite.val(text.substring(0, start) +
+                            before + text.substring(start, end) + after +
+                            text.substring(end));
+        }
+
+        function updatePreview() {
+            $textPreview.html(options.textfilter($textWrite.val()));
+        }
+
         function injectStyles(styles) {
             var $style = $('<style id="jswriter-styles"></styles'),
                 css = '',
@@ -122,17 +150,54 @@
                         'border': '1px solid #aaa',
                         'height': '500px'
                     },
-                    '.jswriter .editor-text': {
-                        'padding': '15px',
+                    '.jswriter .editor-window': {
                         'height': '100%',
                         'width': '100%',
                         'float': 'left',
                         'overflow-y': 'hidden'
                     },
+                    '.jswriter .editor-text': {
+                        'padding': '15px'
+                    },
                     '.jswriter .editor-text:hover': {
                         'overflow-y': 'auto'
                     },
-                    '.jswriter .editor.both .editor-text': {
+                    '.jswriter .controls': {
+                        'list-style': 'none',
+                        'padding-left': '0',
+                        'margin-bottom': '0',
+                        'background-color': '#eee'
+                    },
+                    '.jswriter .controls:after': {
+                        'content': '" "',
+                        'display': 'block',
+                        'clear': 'both'
+                    },
+                    '.jswriter .controls li': {
+                        'cursor': 'pointer',
+                        'float': 'left',
+                        'background-color': '#fff',
+                        'border': '1px solid #666',
+                        'text-align': 'center',
+                        'line-height': '20px',
+                        'margin': '2px',
+                        'width': '20px',
+                        'height': '20px'
+                    },
+                    '.jswriter .controls li:hover': {
+                        'background-color': '#eee'
+                    },
+                    '.jswriter .controls .bold': {
+                        'font-weight': 'bold'
+                    },
+                    '.jswriter .controls .italic': {
+                        'font-style': 'italic'
+                    },
+                    '.jswriter textarea': {
+                        'width': '100%',
+                        'height': '474px'
+                    },
+                    '.jswriter .editor.both .editor-window': {
                         'width': '49.5%'
                     },
                     '.jswriter .text-write': {
