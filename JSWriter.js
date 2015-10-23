@@ -4,7 +4,6 @@
         var defaultOptions = {
                 text: '',
                 styles: true,
-                usingBootstrap: true,
                 textfilter: function(text) {
                     return text;
                 }
@@ -18,14 +17,17 @@
 
         // Prepare html markup
         var $el = $(this),
-            $tabs = $('<ul class="tabs editor-tabs">' +
-                            '<li data-mode="both" class="active"><a>Both</a></li>' +
-                            '<li data-mode="write"><a>Write</a></li>' +
-                            '<li data-mode="preview"><a>Preview</a></li>' +
-                        '</ul>'),
+            $controls = $('<div class="controls">' +
+                            '<ul class="tabs">' +
+                                '<li data-mode="both" class="active"><a>Both</a></li>' +
+                                '<li data-mode="write"><a>Write</a></li>' +
+                                '<li data-mode="preview"><a>Preview</a></li>' +
+                            '</ul>' +
+                            '<a class="fullscreen">Fullscreen</a>' +
+                        '</div>'),
             $editor = $('<div class="editor both">' +
                             '<div class="text-write editor-window">' +
-                                '<ul data-action="controls" class="controls">' +
+                                '<ul class="tools">' +
                                     '<li data-action="bold" class="bold">B</li>' +
                                     '<li data-action="italic" class="italic">I</li>' +
                                 '</ul>' +
@@ -37,29 +39,25 @@
             $textWrite = $editor.find('.text-write textarea'),
             $textPreview = $editor.find('.text-preview');
 
-        if (options.usingBootstrap) {
-            $tabs.removeClass('editor-tabs');
-            $tabs.addClass('nav');
-            $tabs.addClass('nav-tabs');
-        }
-
         $el.addClass('jswriter');
-        $el.append($tabs);
+        $el.append($controls);
         $el.append($editor);
 
         // Prepare events
         var currentMode = 'both';
-        $tabs.on('click', 'li', function() {
+        $controls.on('click', 'li', function() {
             var $this = $(this),
                 mode = $this.data('mode');
             if (mode != currentMode) {
                 $editor.removeClass(currentMode);
                 $editor.addClass(mode);
-                $tabs.find('.active').removeClass('active');
+                $controls.find('.active').removeClass('active');
                 $this.addClass('active');
                 currentMode = mode;
             }
         });
+
+        $controls.find('.fullscreen').click(fullscreen);
 
         $textWrite.on('keydown', function(e) {
                 // Allow tab character
@@ -80,7 +78,7 @@
 
         $textWrite.on('keyup', updatePreview);
 
-        $editor.find('.controls').on('click', 'li', function() {
+        $editor.find('.tools').on('click', 'li', function() {
             var action = $(this).data('action');
             if (action == 'bold') {
                 wrapSelectedText('<strong>', '</strong>');
@@ -120,6 +118,12 @@
             $textPreview.html(options.textfilter($textWrite.val()));
         }
 
+        function fullscreen() {
+            var el = $el[0];
+            var fullscreenMethod = el.requestFullScreen || el.webkitRequestFullScreen || el.mozRequestFullScreen;
+            fullscreenMethod.call(el);
+        }
+
         function injectStyles(styles) {
             var $style = $('<style id="jswriter-styles"></styles'),
                 css = '',
@@ -142,8 +146,9 @@
         }
 
         function buildStyles() {
-            var styles = {
-                    '.jswriter .tabs li': {
+            var controlsHeight = 40,
+                styles = {
+                    '.jswriter a': {
                         'cursor': 'pointer'
                     },
                     '.jswriter .editor': {
@@ -163,17 +168,66 @@
                         'overflow-y': 'auto'
                     },
                     '.jswriter .controls': {
+                        'width': '100%',
+                        'height': controlsHeight + 'px'
+                    },
+                    '.jswriter .tabs': {
+                        'list-style': 'none',
+                        'padding-left': '0',
+                        'margin-bottom': '0'
+                    },
+                    '.jswriter .tabs li': {
+                        'float': 'left',
+                        'display': 'block'
+                    },
+                    '.jswriter .tabs a': {
+                        'display': 'block',
+                        'height': controlsHeight + 'px',
+                        'line-height': controlsHeight + 'px',
+                        'padding': '0 5px',
+                        'border-radius': '4px 4px 0px 0px',
+                        'margin': '0 3px',
+                        'color': '#888',
+                        'background-color': '#eee',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none'
+                    },
+                    '.jswriter .tabs a:hover': {
+                        'color': '#444',
+                        'background-color': '#aaa'
+                    },
+                    '.jswriter .tabs .active a': {
+                        'font-weight': 'bold',
+                        'color': '#111',
+                        'background-color': '#aaa'
+                    },
+                    '.jswriter .fullscreen': {
+                        'float': 'right',
+                        'text-decoration': 'none',
+                        'color': '#fff',
+                        'background-color': '#5bc0de',
+                        'border-radius': '4px',
+                        'border': '1px solid #46b8da',
+                        'padding': '0 5px',
+                        'margin': '2px',
+                        'height': (controlsHeight - 4) + 'px',
+                        'line-height': (controlsHeight - 4) + 'px'
+                    },
+                    '.jswriter .fullscreen:hover': {
+                        'background-color': '#46adcc'
+                    },
+                    '.jswriter .tools': {
                         'list-style': 'none',
                         'padding-left': '0',
                         'margin-bottom': '0',
                         'background-color': '#eee'
                     },
-                    '.jswriter .controls:after': {
+                    '.jswriter .tools:after': {
                         'content': '" "',
                         'display': 'block',
                         'clear': 'both'
                     },
-                    '.jswriter .controls li': {
+                    '.jswriter .tools li': {
                         'cursor': 'pointer',
                         'float': 'left',
                         'background-color': '#fff',
@@ -184,13 +238,13 @@
                         'width': '20px',
                         'height': '20px'
                     },
-                    '.jswriter .controls li:hover': {
+                    '.jswriter .tools li:hover': {
                         'background-color': '#eee'
                     },
-                    '.jswriter .controls .bold': {
+                    '.jswriter .tools .bold': {
                         'font-weight': 'bold'
                     },
-                    '.jswriter .controls .italic': {
+                    '.jswriter .tools .italic': {
                         'font-style': 'italic'
                     },
                     '.jswriter textarea': {
@@ -205,6 +259,9 @@
                         'background': '#d8d8d8',
                         'resize': 'none'
                     },
+                    '.jswriter .text-preview': {
+                        'background': '#fff'
+                    },
                     '.jswriter .separator': {
                         'background': '#aaa',
                         'float': 'left',
@@ -218,37 +275,6 @@
                         'display': 'none'
                     }
                 };
-
-            if (!options.usingBootstrap) {
-                styles['.jswriter .editor-tabs'] = {
-                    'list-style': 'none',
-                    'padding-left': '0',
-                    'margin-bottom': '0'
-                };
-                styles['.jswriter .editor-tabs::after'] = {
-                    'display': 'table',
-                    'content': '" "',
-                    'clear': 'both'
-                };
-                styles['.jswriter .editor-tabs li'] = {
-                    'float': 'left',
-                    'display': 'block'
-                };
-                styles['.jswriter .editor-tabs a'] = {
-                    'display': 'block',
-                    'padding': '8px',
-                    'border': '1px solid #aaa',
-                    'background-color': '#eee',
-                    'font-size': '2rem',
-                    'text-decoration': 'none'
-                };
-                styles['.jswriter .editor-tabs a:hover'] = {
-                    'background-color': '#aaa'
-                };
-                styles['.jswriter .active a'] = {
-                    'background-color': '#aaa'
-                };
-            }
 
             return styles;
         }
