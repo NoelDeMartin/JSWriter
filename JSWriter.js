@@ -1,3 +1,6 @@
+/**
+* More Info: https://github.com/noeldemartin/jswriter
+*/
 (function($){
     $.fn.JSWriter = function (options) {
         // Initialize options
@@ -49,7 +52,8 @@
                                 '<ul class="tools">' +
                                     '<li data-action="bold" class="bold">B</li>' +
                                     '<li data-action="italic" class="italic">I</li>' +
-                                    '<li data-action="image" class="image">image</li>' +
+                                    '<li data-action="upload-image" class="upload-image">upload image</li>' +
+                                    '<li data-action="url-image" class="url-image">url image</li>' +
                                 '</ul>' +
                                 '<textarea name="text_markdown" class="editor-text"></textarea>' +
                                 '<ul class="assets"></ul>' +
@@ -82,21 +86,12 @@
         $controls.find('.fullscreen').click(fullscreen);
 
         $textWrite.on('keydown', function(e) {
-                // Allow tab character
-                if ((e.keyCode || e.which) == 9) {
-                    e.preventDefault();
-                    var start = $textWrite.get(0).selectionStart,
-                        end = $textWrite.get(0).selectionEnd;
-
-                    // set textarea value to: text before caret + tab + text after caret
-                    $textWrite.val(
-                            $textWrite.val().substring(0, start)
-                                + "\t" + $textWrite.val().substring(end));
-
-                    // put caret at right position again
-                    $textWrite.get(0).selectionStart = $textWrite.get(0).selectionEnd = start + 1;
-                }
-            });
+            // Allow tab character
+            if ((e.keyCode || e.which) == 9) {
+                e.preventDefault();
+                replaceSelectedText('\t');
+            }
+        });
 
         $textWrite.on('keyup', updatePreview);
 
@@ -105,11 +100,14 @@
             var action = $(this).data('action');
             if (action == 'bold') {
                 wrapSelectedText('<strong>', '</strong>');
-                updatePreview();
             } else if (action == 'italic') {
                 wrapSelectedText('<em>', '</em>');
-                updatePreview();
-            } else if (action == 'image') {
+            } else if (action == 'url-image') {
+                var url = prompt('Please enter url', '');
+                if (url) {
+                    replaceSelectedText('<img src="' + url + '" />');
+                }
+            } else if (action == 'upload-image') {
                 var $fileInput = options.createFileInput();
                 $fileInput.change(function() {
                     var reader = new FileReader();
@@ -163,6 +161,22 @@
             $textWrite.val(text.substring(0, start) +
                             before + text.substring(start, end) + after +
                             text.substring(end));
+
+            updatePreview();
+            $textWrite.focus();
+            $textWrite.get(0).selectionStart = $textWrite.get(0).selectionEnd = end + before.length + after.length;
+        }
+
+        function replaceSelectedText(newText) {
+            var start = $textWrite.get(0).selectionStart,
+                end = $textWrite.get(0).selectionEnd,
+                text = $textWrite.val();
+
+            $textWrite.val(text.substring(0, start) + newText + text.substring(end));
+            $textWrite.focus();
+            $textWrite.get(0).selectionStart = $textWrite.get(0).selectionEnd = start + newText.length;
+
+            updatePreview();
         }
 
         function addNewAsset(asset) {
