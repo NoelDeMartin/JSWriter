@@ -2,11 +2,30 @@
     $.fn.JSWriter = function (options) {
         // Initialize options
         var defaultOptions = {
+                /**
+                * String used to populate editor window.
+                */
                 text: '',
-                styles: true,
-                textfilter: function(text) {
-                    return text;
-                }
+                /**
+                * Styles to be used for the writer.
+                *
+                * This can either be a boolean False indicating not to use any styles or an
+                * object where keys are css selectors, and values are JSON objects with css attribute-value pairs.
+                */
+                styles: buildDefaultStyles(),
+                /**
+                * Filters the text from input (editor) to output (preview).
+                *
+                * By default this method doesn't modify the text, it's intended to use for external formatting libraries (like markup).
+                */
+                filterText: defaultFilterText,
+                /**
+                * Provide a jQuery handle of a file type input.
+                *
+                * This input mustn't be activated by the user because it'll activated in javascript, so it is recommended that this
+                * input is hidden.
+                */
+                createFileInput: defaultCreateFileInput
             },
             options = $.extend(defaultOptions, options);
 
@@ -30,8 +49,10 @@
                                 '<ul class="tools">' +
                                     '<li data-action="bold" class="bold">B</li>' +
                                     '<li data-action="italic" class="italic">I</li>' +
+                                    '<li data-action="image" class="image">image</li>' +
                                 '</ul>' +
-                                '<textarea name="text_markdown" class="text-write editor-text"></textarea>' +
+                                '<textarea name="text_markdown" class="editor-text"></textarea>' +
+                                '<ul class="assets"></ul>' +
                             '</div>' +
                             '<div class="separator"></div>' +
                             '<div class="text-preview editor-text editor-window"></div>' +
@@ -42,6 +63,7 @@
         $el.addClass('jswriter');
         $el.append($controls);
         $el.append($editor);
+        updateEditorBounds();
 
         // Prepare events
         var currentMode = 'both';
@@ -78,28 +100,57 @@
 
         $textWrite.on('keyup', updatePreview);
 
+        var assets = {};
         $editor.find('.tools').on('click', 'li', function() {
             var action = $(this).data('action');
             if (action == 'bold') {
                 wrapSelectedText('<strong>', '</strong>');
+                updatePreview();
             } else if (action == 'italic') {
                 wrapSelectedText('<em>', '</em>');
+                updatePreview();
+            } else if (action == 'image') {
+                var $fileInput = options.createFileInput();
+                $fileInput.change(function() {
+                    var reader = new FileReader();
+                    reader.onload = function (e) {
+                        var start = $textWrite.get(0).selectionStart,
+                            end = $textWrite.get(0).selectionEnd,
+                            text = $textWrite.val(),
+                            imageId = $fileInput.val();
+
+                        assets[imageId] = {'type': 'image',
+                                            'id': imageId,
+                                            'data': e.target.result,
+                                            'input': $fileInput};
+
+                        $textWrite.val(text.substring(0, start) +
+                                        '{{image ' + imageId + '}}' +
+                                        text.substring(end));
+
+                        updatePreview();
+
+                        addNewAsset(assets[imageId]);
+                    }
+                    reader.readAsDataURL($fileInput[0].files[0]);
+                });
+                $fileInput.trigger('click');
             }
-            updatePreview();
         });
 
         // Init text
         if (options.text.length > 0) {
             $textWrite.text(options.text);
-            $textPreview.html(options.textfilter(options.text));
+            $textPreview.html(options.filterText(resolveAssets(options.text)));
         }
 
         // Public methods
-        this.getTexts = function() {
+        this.getData = function() {
             var rawText = $textWrite.val();
             return {
-                'write': rawText,
-                'preview': options.textfilter(rawText)
+                'input': rawText,
+                'output': options.filterText(resolveAssets(rawText)),
+                'assets': assets
             };
         }
 
@@ -114,8 +165,34 @@
                             text.substring(end));
         }
 
+        function addNewAsset(asset) {
+            $editor.find('.assets').append('<li><span class="type">' + asset.type + '</span>' + asset.id + '</li>');
+            updateEditorBounds();
+        }
+
+        function resolveAssets(text) {
+            var assetMatches = text.match(/{{.+?}}/g);
+            if (assetMatches) {
+                $.each(assetMatches, function(key, value) {
+                    var assetType = value.substring(2, value.indexOf(' ')),
+                        assetId = value.substring(value.indexOf(' ')+1, value.length-2);
+                    if (assetType == 'image') {
+                        text = text.replace(value, '<img src="' + assets[assetId].data + '" />');
+                    }
+                });
+            }
+            return text;
+        }
+
         function updatePreview() {
-            $textPreview.html(options.textfilter($textWrite.val()));
+            $textPreview.html(options.filterText(resolveAssets($textWrite.val())));
+        }
+
+        function updateEditorBounds() {
+            var $tools = $editor.find('.tools'),
+                $textarea = $editor.find('textarea'),
+                $assets = $editor.find('.assets');
+            $textarea.outerHeight($editor.height() - $tools.outerHeight() - $assets.outerHeight());
         }
 
         function fullscreen() {
@@ -129,10 +206,6 @@
                 css = '',
                 rule;
 
-            if (typeof styles != 'object') {
-                styles = buildStyles();
-            }
-
             for (selector in styles) {
                 css += selector + '{';
                 rule = styles[selector];
@@ -145,7 +218,7 @@
             $('head').append($style);
         }
 
-        function buildStyles() {
+        function buildDefaultStyles() {
             var controlsHeight = 40,
                 styles = {
                     '.jswriter a': {
@@ -235,7 +308,8 @@
                         'text-align': 'center',
                         'line-height': '20px',
                         'margin': '2px',
-                        'width': '20px',
+                        'padding': '0 5px',
+                        'min-width': '20px',
                         'height': '20px'
                     },
                     '.jswriter .tools li:hover': {
@@ -249,15 +323,28 @@
                     },
                     '.jswriter textarea': {
                         'width': '100%',
-                        'height': '474px'
+                        'border': '0px',
+                        'resize': 'none',
+                        'background': '#d8d8d8'
+                    },
+                    '.jswriter .assets': {
+                        'list-style': 'none',
+                        'padding': 0,
+                        'margin': 0
+                    },
+                    '.jswriter .assets li': {
+                        'background-color': '#eee',
+                        'border': '1px solid #bbb',
+                        'padding': '5px'
+                    },
+                    '.jswriter .assets .type': {
+                        'background-color': '#333',
+                        'color': '#fff',
+                        'padding': '3px',
+                        'margin-right': '5px'
                     },
                     '.jswriter .editor.both .editor-window': {
                         'width': '49.5%'
-                    },
-                    '.jswriter .text-write': {
-                        'border': '0px',
-                        'background': '#d8d8d8',
-                        'resize': 'none'
                     },
                     '.jswriter .text-preview': {
                         'background': '#fff'
@@ -277,6 +364,14 @@
                 };
 
             return styles;
+        }
+
+        function defaultFilterText(text) {
+            return text;
+        }
+
+        function defaultCreateFileInput() {
+            return $('<input type="file" />');
         }
 
         return this;
