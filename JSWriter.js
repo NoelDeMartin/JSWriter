@@ -21,7 +21,13 @@
                 *
                 * By default this method doesn't modify the text, it's intended to use for external formatting libraries (like markup).
                 */
-                filterText: defaultFilterText
+                filterText: defaultFilterText,
+                /**
+                * Build the url for an asset once uploaded (used in the text which will be stored persistently).
+                *
+                * By default, this url will be relative to root in the following format: /assets/{id}.{extension}
+                */
+                buildAssetUrl: defaultBuildAssetUrl
             },
             options = $.extend(defaultOptions, options);
 
@@ -48,7 +54,7 @@
                                     '<li data-action="upload-image" class="upload-image">upload image</li>' +
                                     '<li data-action="url-image" class="url-image">url image</li>' +
                                 '</ul>' +
-                                '<textarea name="text_markdown" class="editor-text"></textarea>' +
+                                '<textarea class="editor-text"></textarea>' +
                                 '<ul class="assets"></ul>' +
                             '</div>' +
                             '<div class="separator"></div>' +
@@ -58,8 +64,8 @@
             $textPreview = $editor.find('.text-preview');
 
         $el.addClass('jswriter');
-        $el.append($controls);
-        $el.append($editor);
+        $el.prepend($editor);
+        $el.prepend($controls);
         updateEditorBounds();
 
         // Prepare events
@@ -109,10 +115,16 @@
                         var start = $textWrite.get(0).selectionStart,
                             end = $textWrite.get(0).selectionEnd,
                             text = $textWrite.val(),
-                            imageId = $fileInput.val();
+                            imageId = $fileInput.val(),
+                            extension = $fileInput[0].files[0].type;
+
+                        extension = extension.substring(extension.indexOf('/')+1);
+                        imageId = imageId.substring(0, imageId.lastIndexOf('.'));
+                        imageId = imageId.replace(new RegExp('[^\\w\\d-_]', 'g'), '');
 
                         assets[imageId] = {'type': 'image',
                                             'id': imageId,
+                                            'extension': extension,
                                             'data': e.target.result};
 
                         $textWrite.val(text.substring(0, start) +
@@ -121,7 +133,7 @@
 
                         updatePreview();
 
-                        addNewAsset(assets[imageId]);
+                        addNewAsset(assets[imageId], $fileInput);
                     }
                     reader.readAsDataURL($fileInput[0].files[0]);
                 });
@@ -129,20 +141,20 @@
             }
         });
 
+        $el.on('submit', function() {
+            var $inputTextOriginal = $('<input name="text_original" type="hidden" />'),
+                $inputTextHtml = $('<input name="text_html" type="hidden" />');
+            $el.append($inputTextOriginal);
+            $el.append($inputTextHtml);
+
+            $inputTextOriginal.val(resolveAssets($textWrite.val(), true));
+            $inputTextHtml.val(options.filterText(resolveAssets($textWrite.val(), true)));
+        });
+
         // Init text
         if (options.text.length > 0) {
             $textWrite.text(options.text);
             $textPreview.html(options.filterText(resolveAssets(options.text)));
-        }
-
-        // Public methods
-        this.getData = function() {
-            var rawText = $textWrite.val();
-            return {
-                'input': rawText,
-                'output': options.filterText(resolveAssets(rawText)),
-                'assets': assets
-            };
         }
 
         // Private methods
@@ -172,7 +184,7 @@
             updatePreview();
         }
 
-        function addNewAsset(asset) {
+        function addNewAsset(asset, $fileInput) {
             var $asset = $('<li>' +
                                 '<span class="type"><span>' + asset.type + '</span></span>' +
                                 '<span class="id"><input data-id="' + asset.id + '" name="asset_ids[]" type="text" value="' + asset.id + '"/></span>' +
@@ -181,6 +193,7 @@
                             '</li>'),
                 $input = $asset.find('input');
             $editor.find('.assets').append($asset);
+            $asset.append($fileInput);
             $input.on('keyup', function() {
                 var $this = $(this),
                     oldId = $this.data('id'),
@@ -203,14 +216,19 @@
             updateEditorBounds();
         }
 
-        function resolveAssets(text) {
+        function resolveAssets(text, assetUrl) {
+            assetUrl = typeof assetUrl !== 'undefined' ? assetUrl : false;
             var assetMatches = text.match(/{{.+?}}/g);
             if (assetMatches) {
                 $.each(assetMatches, function(key, value) {
                     var assetType = value.substring(2, value.indexOf(' ')),
                         assetId = value.substring(value.indexOf(' ')+1, value.length-2);
                     if (assetType == 'image') {
-                        text = text.replace(value, '<img src="' + assets[assetId].data + '" />');
+                        if (assetUrl) {
+                            text = text.replace(value, '<img src="' + options.buildAssetUrl(assets[assetId]) + '" />');
+                        } else {
+                            text = text.replace(value, '<img src="' + assets[assetId].data + '" />');
+                        }
                     }
                 });
             }
@@ -462,6 +480,9 @@
                     '.jswriter .assets .add:hover': {
                         'background-color': '#4cae4c'
                     },
+                    '.jswriter .assets input[type="file"]': {
+                        'display': 'none'
+                    },
                     '.jswriter .editor.both .editor-window': {
                         'width': '49.5%'
                     },
@@ -487,6 +508,10 @@
 
         function defaultFilterText(text) {
             return text;
+        }
+
+        function defaultBuildAssetUrl(asset) {
+            return '/assets/' + asset.id + '.' + 'png';
         }
 
         return this;
