@@ -21,14 +21,7 @@
                 *
                 * By default this method doesn't modify the text, it's intended to use for external formatting libraries (like markup).
                 */
-                filterText: defaultFilterText,
-                /**
-                * Provide a jQuery handle of a file type input.
-                *
-                * This input mustn't be activated by the user because it'll activated in javascript, so it is recommended that this
-                * input is hidden.
-                */
-                createFileInput: defaultCreateFileInput
+                filterText: defaultFilterText
             },
             options = $.extend(defaultOptions, options);
 
@@ -45,7 +38,7 @@
                                 '<li data-mode="write"><a>Write</a></li>' +
                                 '<li data-mode="preview"><a>Preview</a></li>' +
                             '</ul>' +
-                            '<a class="fullscreen">Fullscreen</a>' +
+                            '<a class="fullscreen-toggle">Fullscreen</a>' +
                         '</div>'),
             $editor = $('<div class="editor both">' +
                             '<div class="text-write editor-window">' +
@@ -83,7 +76,8 @@
             }
         });
 
-        $controls.find('.fullscreen').click(fullscreen);
+        $controls.find('.fullscreen-toggle').click(fullscreen);
+        $(document).on('webkitfullscreenchange mozfullscreenchange fullscreenchange MSFullscreenChange', updateEditorBounds);
 
         $textWrite.on('keydown', function(e) {
             // Allow tab character
@@ -108,7 +102,7 @@
                     replaceSelectedText('<img src="' + url + '" />');
                 }
             } else if (action == 'upload-image') {
-                var $fileInput = options.createFileInput();
+                var $fileInput = $('<input name="assets[]" type="file" />');
                 $fileInput.change(function() {
                     var reader = new FileReader();
                     reader.onload = function (e) {
@@ -119,8 +113,7 @@
 
                         assets[imageId] = {'type': 'image',
                                             'id': imageId,
-                                            'data': e.target.result,
-                                            'input': $fileInput};
+                                            'data': e.target.result};
 
                         $textWrite.val(text.substring(0, start) +
                                         '{{image ' + imageId + '}}' +
@@ -180,7 +173,33 @@
         }
 
         function addNewAsset(asset) {
-            $editor.find('.assets').append('<li><span class="type">' + asset.type + '</span>' + asset.id + '</li>');
+            var $asset = $('<li>' +
+                                '<span class="type"><span>' + asset.type + '</span></span>' +
+                                '<span class="id"><input data-id="' + asset.id + '" name="asset_ids[]" type="text" value="' + asset.id + '"/></span>' +
+                                '<span class="action"><a class="add">+</a></span>' +
+                                '<span class="action"><a class="remove">×</a></span>' +
+                            '</li>'),
+                $input = $asset.find('input');
+            $editor.find('.assets').append($asset);
+            $input.on('keyup', function() {
+                var $this = $(this),
+                    oldId = $this.data('id'),
+                    newId = $this.val();
+                if (oldId != newId) {
+                    $this.data('id', newId);
+                    updateAssetId(oldId, newId);
+                }
+            });
+            $asset.find('a.add').on('click', function() {
+                var asset = assets[$input.data('id')];
+                replaceSelectedText('{{' + asset.type + ' ' + asset.id + '}}');
+            });
+            $asset.find('a.remove').on('click', function() {
+                removeAsset($input.data('id'));
+                $asset.remove();
+                updateEditorBounds();
+                updatePreview();
+            });
             updateEditorBounds();
         }
 
@@ -198,6 +217,33 @@
             return text;
         }
 
+        function updateAssetId(oldId, newId) {
+            var asset = assets[oldId],
+                text = $textWrite.val(),
+                oldAsset = '{{' + asset.type + ' ' + oldId + '}}',
+                oldAssetRegexp = new RegExp(oldAsset, 'g'),
+                newAsset = '{{' + asset.type + ' ' + newId + '}}';
+
+            // update text
+            text = text.replace(oldAssetRegexp, newAsset);
+            $textWrite.val(text);
+
+            // update asset
+            asset.id = newId;
+            assets[newId] = asset;
+            delete assets[oldId];
+        }
+
+        function removeAsset(id) {
+            var asset = assets[id],
+                text = $textWrite.val(),
+                oldAssetRegexp = new RegExp('{{' + asset.type + ' ' + id + '}}', 'g');
+
+            text = text.replace(oldAssetRegexp, '');
+            $textWrite.val(text);
+            delete assets[id];
+        }
+
         function updatePreview() {
             $textPreview.html(options.filterText(resolveAssets($textWrite.val())));
         }
@@ -213,6 +259,7 @@
             var el = $el[0];
             var fullscreenMethod = el.requestFullScreen || el.webkitRequestFullScreen || el.mozRequestFullScreen;
             fullscreenMethod.call(el);
+            $editor.addClass('fullscreen');
         }
 
         function injectStyles(styles) {
@@ -241,6 +288,9 @@
                     '.jswriter .editor': {
                         'border': '1px solid #aaa',
                         'height': '500px'
+                    },
+                    '.jswriter.fullscreen .editor': {
+                        // TODO 'height': '100%'
                     },
                     '.jswriter .editor-window': {
                         'height': '100%',
@@ -288,7 +338,7 @@
                         'color': '#111',
                         'background-color': '#aaa'
                     },
-                    '.jswriter .fullscreen': {
+                    '.jswriter .fullscreen-toggle': {
                         'float': 'right',
                         'text-decoration': 'none',
                         'color': '#fff',
@@ -300,7 +350,7 @@
                         'height': (controlsHeight - 4) + 'px',
                         'line-height': (controlsHeight - 4) + 'px'
                     },
-                    '.jswriter .fullscreen:hover': {
+                    '.jswriter .fullscreen-toggle:hover': {
                         'background-color': '#46adcc'
                     },
                     '.jswriter .tools': {
@@ -343,19 +393,74 @@
                     },
                     '.jswriter .assets': {
                         'list-style': 'none',
-                        'padding': 0,
-                        'margin': 0
+                        'padding': '0',
+                        'margin': '0'
                     },
                     '.jswriter .assets li': {
+                        'display': 'table',
+                        'width': '100%',
                         'background-color': '#eee',
                         'border': '1px solid #bbb',
                         'padding': '5px'
                     },
                     '.jswriter .assets .type': {
+                        'vertical-align': 'middle',
+                        'display': 'table-cell',
+                        'padding': '0 5px'
+                    },
+                    '.jswriter .assets .type span': {
+                        'display': 'block',
+                        'color': 'white',
                         'background-color': '#333',
-                        'color': '#fff',
-                        'padding': '3px',
-                        'margin-right': '5px'
+                        'height': '30px',
+                        'width': '80px',
+                        'line-height': '30px',
+                        'text-align': 'center'
+                    },
+                    '.jswriter .assets .id': {
+                        'vertical-align': 'middle',
+                        'display': 'table-cell',
+                        'width': '100%',
+                        'padding': '0 5px'
+                    },
+                    '.jswriter .assets .id input': {
+                        'border': '0',
+                        'padding-left': '5px',
+                        'background-color': '#eee',
+                        'width': '100%',
+                        'height': '30px'
+                    },
+                    '.jswriter .assets .id input:hover, .jswriter .assets .id input:focus': {
+                        'background-color': '#9dc8c5'
+                    },
+                    '.jswriter .assets .action': {
+                        'display': 'table-cell',
+                        'text-align': 'center',
+                        'width': '34px',
+                        'padding': '0 2px'
+                    },
+                    '.jswriter .assets .action a': {
+                        'display': 'block',
+                        'line-height': '30px',
+                        'font-size': '20px',
+                        'font-weight': 'bold',
+                        'color': 'white',
+                        'border-radius': '3px',
+                        'width': '30px',
+                        'height': '30px',
+                        'text-decoration': 'none'
+                    },
+                    '.jswriter .assets .remove': {
+                        'background-color': '#d9534f'
+                    },
+                    '.jswriter .assets .remove:hover': {
+                        'background-color': '#d43f3a'
+                    },
+                    '.jswriter .assets .add': {
+                        'background-color': '#5cb85C'
+                    },
+                    '.jswriter .assets .add:hover': {
+                        'background-color': '#4cae4c'
                     },
                     '.jswriter .editor.both .editor-window': {
                         'width': '49.5%'
@@ -382,10 +487,6 @@
 
         function defaultFilterText(text) {
             return text;
-        }
-
-        function defaultCreateFileInput() {
-            return $('<input type="file" />');
         }
 
         return this;
