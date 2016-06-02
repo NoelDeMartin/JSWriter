@@ -1,5 +1,6 @@
 /**
-* More Info: https://github.com/noeldemartin/jswriter
+* JSWriter - v0.1.0
+* https://github.com/noeldemartin/jswriter
 */
 (function($){
     $.fn.JSWriter = function (options) {
@@ -9,6 +10,27 @@
                 * String used to populate editor window.
                 */
                 text: '',
+                /**
+                * Strings to be used as attributes in the input textarea.
+                *
+                * If value is false, attributes will not be present.
+                */
+                inputName: false,
+                inputPlaceholder: false,
+                /**
+                * Whether to enable or not some features of the editor.
+                */
+                imagesEnabled: true,
+                fullscreenEnabled: true,
+                /**
+                * Tools callbacks.
+                */
+                onTextBold: function(editor) {
+                    editor.wrapSelectedText('<strong>', '</strong>');
+                },
+                onTextItalic: function(editor) {
+                    editor.wrapSelectedText('<em>', '</em>');
+                },
                 /**
                 * Styles to be used for the writer.
                 *
@@ -27,7 +49,7 @@
                 *
                 * By default, this url will be relative to root in the following format: /assets/{id}.{extension}
                 */
-                buildAssetUrl: defaultBuildAssetUrl
+                buildAssetUrl: defaultBuildAssetUrl,
             },
             options = $.extend(defaultOptions, options);
 
@@ -37,7 +59,8 @@
         }
 
         // Prepare html markup
-        var $el = $(this),
+        var editor = this,
+            $el = $(this),
             $controls = $('<div class="controls">' +
                             '<ul class="tabs">' +
                                 '<li data-mode="both" class="active"><a>Both</a></li>' +
@@ -62,6 +85,21 @@
                         '</div>'),
             $textWrite = $editor.find('.text-write textarea'),
             $textPreview = $editor.find('.text-preview');
+
+        if (options.inputName) {
+            $textWrite.attr('name', options.inputName);
+        }
+        if (options.inputPlaceholder) {
+            $textWrite.attr('placeholder', options.inputPlaceholder);
+        }
+
+        if (!options.imagesEnabled) {
+            $editor.find('.tools .upload-image').remove();
+            $editor.find('.tools .url-image').remove();
+        }
+        if (!options.fullscreenEnabled) {
+            $controls.find('.fullscreen-toggle').remove();
+        }
 
         $el.addClass('jswriter');
         $el.prepend($editor);
@@ -99,9 +137,9 @@
         $editor.find('.tools').on('click', 'li', function() {
             var action = $(this).data('action');
             if (action == 'bold') {
-                wrapSelectedText('<strong>', '</strong>');
+                options.onTextBold(editor);
             } else if (action == 'italic') {
-                wrapSelectedText('<em>', '</em>');
+                options.onTextItalic(editor);
             } else if (action == 'url-image') {
                 var url = prompt('Please enter url', '');
                 if (url) {
@@ -157,8 +195,8 @@
             $textPreview.html(options.filterText(resolveAssets(options.text)));
         }
 
-        // Private methods
-        function wrapSelectedText(before, after) {
+        // Public methods
+        this.wrapSelectedText = function(before, after) {
             var start = $textWrite.get(0).selectionStart,
                 end = $textWrite.get(0).selectionEnd,
                 text = $textWrite.val();
@@ -172,6 +210,7 @@
             $textWrite.get(0).selectionStart = $textWrite.get(0).selectionEnd = end + before.length + after.length;
         }
 
+        // Private methods
         function replaceSelectedText(newText) {
             var start = $textWrite.get(0).selectionStart,
                 end = $textWrite.get(0).selectionEnd,
